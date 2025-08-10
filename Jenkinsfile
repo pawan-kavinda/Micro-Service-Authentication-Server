@@ -51,10 +51,17 @@ pipeline {
 
         stage('Deploy to ECS') {
             steps {
-                script {
-                    sh '''
-                        aws ecs update-service --cluster auth-service-cluster --service auth-service --force-new-deployment --region $AWS_REGION
-                    '''
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-credentials'
+                    ]
+                ]) {
+                    script {
+                        sh '''
+                            aws ecs update-service --cluster auth-service-cluster --service auth-service --force-new-deployment --region $AWS_REGION
+                        '''
+                    }
                 }
             }
         }
