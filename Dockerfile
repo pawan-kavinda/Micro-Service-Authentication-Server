@@ -1,5 +1,5 @@
 # ---- Stage 1: Build ----
-FROM node:20-alpine AS builder
+FROM node:latest AS builder
 WORKDIR /app
 
 # Install only production deps first for caching
@@ -11,7 +11,7 @@ COPY . .
 RUN npm run build
 
 # ---- Stage 2: Production ----
-FROM node:20-alpine AS production
+FROM node:latest AS production
 WORKDIR /app
 
 ENV NODE_ENV=production
