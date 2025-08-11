@@ -20,11 +20,7 @@
         {
           "name": "NODE_ENV",
           "value": "production"
-        },
-        {
-          "name": "MONGO_URI",
-          "value": "PLACEHOLDER_MONGO_URI"
-        }
+        }        
       ]
     }
   ]
