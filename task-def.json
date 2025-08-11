@@ -4,6 +4,7 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
+  "executionRoleArn": "arn:aws:iam::211125300512:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name": "auth-service",
