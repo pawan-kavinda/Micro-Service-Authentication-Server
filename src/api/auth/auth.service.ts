@@ -4,20 +4,23 @@ import {
   Inject,
   UnauthorizedException,
   NotFoundException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { error } from 'console';
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(forwardRef(() => UserService))
     private UserService: UserService,
-    private jwtService: JwtService
-  ) { }
+    private jwtService: JwtService,
+  ) {}
 
   async validateUser(email: string, pass: string): Promise<any> {
     const query = { email: email };
@@ -30,19 +33,19 @@ export class AuthService {
 
   async generateJwtToken(user: any) {
     const payload = {
-      email: user.email
+      email: user.email,
     };
     return this.jwtService.sign(payload);
   }
 
-  async loginUser (user: any){
-    console.log("🚀 ~ AuthService ~ loginUser ~ user:", user)
+  async loginUser(user: any) {
+    console.log('🚀 ~ AuthService ~ loginUser ~ user:', user);
     const accessToken = await this.generateJwtToken(user);
     await this.UserService.findOneAndUpdate(
       { email: user.email },
-      { accessToken } 
-    )
-    return {access_token: accessToken, user};
+      { accessToken },
+    );
+    return { access_token: accessToken, user };
   }
 
   async getHashedPassword(password: string): Promise<any> {
@@ -58,7 +61,7 @@ export class AuthService {
 
   async comparePasswords(
     password: string,
-    hashedPassword: string
+    hashedPassword: string,
   ): Promise<any> {
     return bcrypt
       .compare(password, hashedPassword)
@@ -71,20 +74,21 @@ export class AuthService {
 
   // Register a new user
   async register(newUser: CreateUserDto): Promise<any> {
-    console.log("🚀 ~ AuthService ~ register ~ newUser:", newUser)
+    console.log('🚀 ~ AuthService ~ register ~ newUser:', newUser);
     const query = { email: newUser.email };
     const isUser = await this.UserService.findOne(query);
-    if (isUser) throw { status: 409, message: 'User Already Exist' };
+    if (isUser)
+      throw new HttpException('User already exists', HttpStatus.CONFLICT);
     const user = await this.UserService.create(newUser);
     return { message: 'Registration successful', user };
   }
 
-   
   async refreshAccessToken(refreshToken: string): Promise<any> {
-     
     try {
-      const payload = this.jwtService.verify(refreshToken, { secret: 'JWT_SECRET' });
-       
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: 'JWT_SECRET',
+      });
+
       const user = await this.UserService.findOne({ email: payload.email });
       if (!user) throw new UnauthorizedException('Invalid refresh token');
       return {

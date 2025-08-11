@@ -10,7 +10,7 @@ export class UserService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @Inject(forwardRef(() => AuthService))
-    private AuthService: AuthService
+    private AuthService: AuthService,
   ) {
     this.logger = new Logger(UserService.name);
   }
@@ -28,10 +28,13 @@ export class UserService {
     if (user.facebookId || user.googleId) return this.userModel.create(user);
 
     const hashedPassword = await this.AuthService.getHashedPassword(
-      user.password
+      user.password,
     );
+    const accessToken = await this.AuthService.generateJwtToken(user);
+    user.accessToken = accessToken;
     user.password = hashedPassword;
     const newUser = new this.userModel(user);
+
     return newUser.save();
   }
 

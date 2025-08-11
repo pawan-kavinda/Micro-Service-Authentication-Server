@@ -5,7 +5,7 @@ export class CreateUserDto {
   readonly firstName: string;
 
   @IsString()
-  readonly lastName: string;
+  readonly lastName?: string;
 
   @IsEmail()
   readonly email: string;
