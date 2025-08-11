@@ -56,12 +56,15 @@ pipeline {
                     [
                         $class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-credentials'
-                    ]
+                    ],
+                    string(credentialsId: 'mongo-uri-credential', variable: 'MONGO_URI')
                 ]) {
                     script {
                         sh '''
                             # Replace image tag in task-def.json
                             sed -i 's|"image": *".*"|"image": "'${ECR_REPO}:${IMAGE_TAG}'"|' task-def.json
+
+                            sed -i 's|PLACEHOLDER_MONGO_URI|'"${MONGO_URI}"'|' task-def.json
 
                             # Register new task definition
                             aws ecs register-task-definition --cli-input-json file://task-def.json > task-def-result.json
