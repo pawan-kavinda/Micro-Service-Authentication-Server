@@ -30,12 +30,10 @@ pipeline {
                         credentialsId: 'aws-credentials'
                     ]
                 ]) {
-                    script {
-                        sh '''
-                            aws --version
-                            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-                        '''
-                    }
+                    sh '''
+                        aws --version
+                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+                    '''
                 }
             }
         }
@@ -49,7 +47,7 @@ pipeline {
             }
         }
 
-        stage('Deploy to ECS') {
+        stage('Register ECS Task Definition and Update Service') {
             steps {
                 withCredentials([
                     [
@@ -59,7 +57,18 @@ pipeline {
                 ]) {
                     script {
                         sh '''
-                            aws ecs update-service --cluster auth-service-cluster --service auth-service --force-new-deployment --region $AWS_REGION
+                            # Replace image tag in task-def.json
+                            sed -i 's|"image": *".*"|"image": "'${ECR_REPO}:${IMAGE_TAG}'"|' task-def.json
+
+                            # Register new task definition
+                            aws ecs register-task-definition --cli-input-json file://task-def.json > task-def-result.json
+
+                            # Extract new task definition ARN
+                            TASK_DEF_ARN=$(jq -r '.taskDefinition.taskDefinitionArn' task-def-result.json)
+                            echo "Registered new task definition: $TASK_DEF_ARN"
+
+                            # Update ECS service with new task definition
+                            aws ecs update-service --cluster auth-service-cluster --service auth-service --task-definition $TASK_DEF_ARN --force-new-deployment --region $AWS_REGION
                         '''
                     }
                 }
