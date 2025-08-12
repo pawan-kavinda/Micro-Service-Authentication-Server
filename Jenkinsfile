@@ -2,12 +2,18 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
-        ECR_REPO = '211125300512.dkr.ecr.us-east-1.amazonaws.com/authentication-service'
+        // Docker Hub credentials stored in Jenkins
+        DOCKERHUB_CRED = credentials('dockerhub-username-password')
+        
+        // Docker Hub repository
+        IMAGE_NAME = "pawankavinda/authentication-service"
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        CLUSTER_NAME = 'auth-service-cluster'
-        SERVICE_NAME = 'auth-service'
-        TASK_DEFINITION_FAMILY = 'auth-service-task'
+
+        // EC2 server details
+        EC2_USER = 'ec2-user'
+        EC2_HOST = '54.197.222.190' 
+        CONTAINER_NAME = 'auth-service'
+        APP_PORT = 4001 // Port exposed in Dockerfile
     }
 
     stages {
@@ -20,28 +26,20 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    dockerImage = docker.build("${ECR_REPO}:${IMAGE_TAG}")
+                    dockerImage = docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
                 }
             }
         }
 
-        stage('Login to AWS ECR') {
+        stage('Login to Docker Hub') {
             steps {
-                withCredentials([
-                    [
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-credentials'
-                    ]
-                ]) {
-                    sh '''
-                        aws --version
-                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-                    '''
-                }
+                sh """
+                echo "${DOCKERHUB_CRED_PSW}" | docker login -u "${DOCKERHUB_CRED_USR}" --password-stdin
+                """
             }
         }
 
-        stage('Push Docker Image to ECR') {
+        stage('Push Docker Image to Docker Hub') {
             steps {
                 script {
                     dockerImage.push()
@@ -50,54 +48,27 @@ pipeline {
             }
         }
 
-        stage('Deploy to ECS') {
+        stage('Deploy to EC2') {
             steps {
-                withCredentials([
-                    [
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-credentials'
-                    ]                    
-                ]) {
-                    script {
-                        sh '''
-                            # Replace image tag in task-def.json
-                            sed -i 's|"image": *".*"|"image": "'${ECR_REPO}:${IMAGE_TAG}'"|' task-def.json                            
-
-                            # Register new task definition
-                            aws ecs register-task-definition --cli-input-json file://task-def.json > task-def-result.json
-
-                            # Extract new task definition ARN
-                            TASK_DEF_ARN=$(jq -r '.taskDefinition.taskDefinitionArn' task-def-result.json)
-                            echo "Registered new task definition: $TASK_DEF_ARN"
-
-                            # Check if service exists
-                            SERVICE_EXISTS=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --region $AWS_REGION --query 'services[0].status' --output text 2>/dev/null || echo "MISSING")
-                            
-                            if [ "$SERVICE_EXISTS" = "MISSING" ] || [ "$SERVICE_EXISTS" = "None" ]; then
-                                echo "Service does not exist. Creating new service..."
-                                aws ecs create-service \
-                                    --cluster $CLUSTER_NAME \
-                                    --service-name $SERVICE_NAME \
-                                    --task-definition $TASK_DEF_ARN \
-                                    --desired-count 1 \
-                                    --launch-type FARGATE \
-                                    --network-configuration "awsvpcConfiguration={subnets=[subnet-0c6df529c92674c41],securityGroups=[sg-0f72f8d6d9aceedbe],assignPublicIp=ENABLED}" \
-                                    --region $AWS_REGION
-                            else
-                                echo "Service exists. Updating service..."
-                                aws ecs update-service \
-                                    --cluster $CLUSTER_NAME \
-                                    --service $SERVICE_NAME \
-                                    --task-definition $TASK_DEF_ARN \
-                                    --force-new-deployment \
-                                    --region $AWS_REGION
-                            fi
-
-                            # Wait for service to be stable
-                            echo "Waiting for service to be stable..."
-                            aws ecs wait services-stable --cluster $CLUSTER_NAME --services $SERVICE_NAME --region $AWS_REGION
-                        '''
-                    }
+                sshagent(credentials: ['ec']) { // 'ec' is your EC2 private key in Jenkins
+                    sh """
+                    echo "Connecting to EC2 instance..."
+                    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${EC2_USER}@${EC2_HOST} '
+                        echo "Pulling latest Docker image..."
+                        echo "${DOCKERHUB_CRED_PSW}" | docker login -u "${DOCKERHUB_CRED_USR}" --password-stdin
+                        docker pull ${IMAGE_NAME}:latest
+                        
+                        echo "Stopping old container..."
+                        docker stop ${CONTAINER_NAME} || true
+                        docker rm ${CONTAINER_NAME} || true
+                        
+                        echo "Starting new container..."
+                        docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:${APP_PORT} ${IMAGE_NAME}:latest
+                        
+                        echo "Deployment verification..."
+                        docker ps | grep ${CONTAINER_NAME}
+                    '
+                    """
                 }
             }
         }
@@ -105,6 +76,7 @@ pipeline {
 
     post {
         always {
+            sh 'docker logout'
             cleanWs()
         }
         success {
