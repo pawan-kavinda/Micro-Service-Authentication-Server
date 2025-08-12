@@ -8,6 +8,6 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true, 
   });
-  await app.listen(4001);
+  await app.listen(4001, '0.0.0.0');
 }
 bootstrap();
