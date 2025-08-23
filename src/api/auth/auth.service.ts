@@ -38,8 +38,7 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
-  async loginUser(user: any) {
-    console.log('🚀 ~ AuthService ~ loginUser ~ user:', user);
+  async loginUser(user: any) {   
     const accessToken = await this.generateJwtToken(user);
     await this.UserService.findOneAndUpdate(
       { email: user.email },
