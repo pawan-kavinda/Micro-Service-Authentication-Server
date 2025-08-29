@@ -1,4 +1,3 @@
-# ---- Stage 1: Build ----
 FROM node:20-alpine AS builder
 WORKDIR /app
 
@@ -24,6 +23,6 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 
 # Expose NestJS default port
-EXPOSE 4001
+EXPOSE 3000
 
 CMD ["node", "dist/main.js"]
